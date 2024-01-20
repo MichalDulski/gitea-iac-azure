@@ -6,13 +6,13 @@ provider "azurerm" {
 
 # Resource Group
 resource "azurerm_resource_group" "rg" {
-  name     = "my-resource-group"
-  location = "East US" # Change to your desired Azure region
+  name     = "gitea-resource-group"
+  location = "North Europe"
 }
 
 # Virtual Network
 resource "azurerm_virtual_network" "vnet" {
-  name                = "my-vnet"
+  name                = "gitea-vnet"
   resource_group_name = azurerm_resource_group.rg.name
   location            = azurerm_resource_group.rg.location
   address_space       = ["10.0.0.0/16"]
@@ -20,7 +20,7 @@ resource "azurerm_virtual_network" "vnet" {
 
 # Subnet
 resource "azurerm_subnet" "subnet" {
-  name                 = "private-subnet"
+  name                 = "gitea-private-subnet"
   resource_group_name  = azurerm_resource_group.rg.name
   virtual_network_name = azurerm_virtual_network.vnet.name
   address_prefixes     = ["10.0.1.0/24"]
@@ -28,10 +28,11 @@ resource "azurerm_subnet" "subnet" {
 
 # Network Security Group for the private subnet
 resource "azurerm_network_security_group" "nsg" {
-  name                = "private-nsg"
+  name                = "gitea-private-nsg"
   resource_group_name = azurerm_resource_group.rg.name
   location            = azurerm_resource_group.rg.location
 }
+
 
 # Allow inbound SSH traffic on the private subnet
 resource "azurerm_network_security_rule" "allow_ssh" {
@@ -47,6 +48,99 @@ resource "azurerm_network_security_rule" "allow_ssh" {
   resource_group_name         = azurerm_resource_group.rg.name
   network_security_group_name = azurerm_network_security_group.nsg.name
 }
+
+# Allow inbound SSH traffic on the private subnet
+resource "azurerm_network_security_rule" "allow_mysql" {
+  name                        = "allow_mysql"
+  priority                    = 1000
+  direction                   = "Inbound"
+  access                      = "Allow"
+  protocol                    = "Tcp"
+  source_port_range           = "*"
+  destination_port_range      = "3306"
+  source_address_prefix       = "*"
+  destination_address_prefix  = "*"
+  resource_group_name         = azurerm_resource_group.rg.name
+  network_security_group_name = azurerm_network_security_group.nsg.name
+}
+
+# Database
+
+resource "azurerm_network_interface" "database_nic" {
+  name                = "database-nic"
+  resource_group_name = azurerm_resource_group.rg.name
+  location            = azurerm_resource_group.rg.location
+  ip_configuration {
+    name                          = "database-ip"
+    subnet_id                     = azurerm_subnet.subnet.id
+    private_ip_address_allocation = "Static"
+    private_ip_address            = "10.0.1.5"
+  }
+}
+
+# Database VM
+resource "azurerm_linux_virtual_machine" "database_vm" {
+  name                = "database-vm"
+  resource_group_name = azurerm_resource_group.rg.name
+  location            = azurerm_resource_group.rg.location
+  size                = "Standard_B1s"
+  admin_username      = "adminuser"
+  network_interface_ids = [
+    azurerm_network_interface.database_nic.id,
+  ]
+
+  # admin_ssh_key {
+  #   username   = "adminuser"
+  #   public_key = file("~/.ssh/id_rsa.pub") # Replace with the path to your SSH public key
+  # }
+
+  source_image_reference {
+    publisher = "Canonical"
+    offer     = "UbuntuServer"
+    sku       = "18.04-LTS"
+    version   = "latest"
+  }
+
+  os_disk {
+    caching              = "ReadWrite"
+    storage_account_type = "Standard_LRS"
+  }
+}
+
+# gitea vm
+
+resource "azurerm_public_ip" "gitea_public_ip" {
+  name                    = "gitea-public-ip"
+  location                = azurerm_resource_group.rg.location
+  resource_group_name     = azurerm_resource_group.rg.name
+  allocation_method       = "Dynamic"
+  idle_timeout_in_minutes = 30
+}
+
+# Network Interfaces
+resource "azurerm_network_interface" "gitea_nic" {
+  name                = "gitea-nic"
+  resource_group_name = azurerm_resource_group.rg.name
+  location            = azurerm_resource_group.rg.location
+  ip_configuration {
+    name                          = "gitea-ip"
+    subnet_id                     = azurerm_subnet.subnet.id
+    private_ip_address_allocation = "Static"
+    private_ip_address            = "10.0.1.4"
+    public_ip_address_id          = azurerm_public_ip.gitea_public_ip.id
+
+  }
+}
+# Managed Disk
+resource "azurerm_managed_disk" "gitea_managed_disk" {
+  name                 = "acctestdisk1"
+  location             = azurerm_resource_group.rg.location
+  resource_group_name  = azurerm_resource_group.rg.name
+  storage_account_type = "Standard_LRS"
+  create_option        = "Empty"
+  disk_size_gb         = "10"
+}
+
 
 # Gitea VM
 resource "azurerm_linux_virtual_machine" "gitea_vm" {
@@ -77,13 +171,14 @@ resource "azurerm_linux_virtual_machine" "gitea_vm" {
   }
 }
 
-resource "azurerm_managed_disk" "gitea_managed_disk" {
-  name                 = "acctestdisk1"
-  location             = azurerm_resource_group.rg.location
-  resource_group_name  = azurerm_resource_group.rg.name
-  storage_account_type = "Standard_LRS"
-  create_option        = "Empty"
-  disk_size_gb         = "1"
+
+data "azurerm_public_ip" "gitea_public_ip" {
+  name                = azurerm_public_ip.gitea_public_ip.name
+  resource_group_name = azurerm_linux_virtual_machine.gitea_vm.resource_group_name
+}
+
+output "public_ip_address" {
+  value = data.azurerm_public_ip.gitea_public_ip.ip_address
 }
 
 resource "azurerm_virtual_machine_data_disk_attachment" "gitea_managed_disk_attachment" {
@@ -91,58 +186,6 @@ resource "azurerm_virtual_machine_data_disk_attachment" "gitea_managed_disk_atta
   virtual_machine_id = azurerm_linux_virtual_machine.gitea_vm.id
   caching            = "ReadWrite"
   lun                = "0"
-}
-
-# Database VM
-resource "azurerm_linux_virtual_machine" "database_vm" {
-  name                = "database-vm"
-  resource_group_name = azurerm_resource_group.rg.name
-  location            = azurerm_resource_group.rg.location
-  size                = "Standard_B1s"
-  admin_username      = "adminuser"
-  network_interface_ids = [
-    azurerm_network_interface.database_nic.id,
-  ]
-
-  admin_ssh_key {
-    username   = "adminuser"
-    public_key = file("~/.ssh/id_rsa.pub") # Replace with the path to your SSH public key
-  }
-
-  source_image_reference {
-    publisher = "Canonical"
-    offer     = "UbuntuServer"
-    sku       = "18.04-LTS"
-    version   = "latest"
-  }
-
-  os_disk {
-    caching              = "ReadWrite"
-    storage_account_type = "Standard_LRS"
-  }
-}
-
-# Network Interfaces
-resource "azurerm_network_interface" "gitea_nic" {
-  name                = "gitea-nic"
-  resource_group_name = azurerm_resource_group.rg.name
-  location            = azurerm_resource_group.rg.location
-  ip_configuration {
-    name                          = "gitea-ip"
-    subnet_id                     = azurerm_subnet.subnet.id
-    private_ip_address_allocation = "Dynamic"
-  }
-}
-
-resource "azurerm_network_interface" "database_nic" {
-  name                = "database-nic"
-  resource_group_name = azurerm_resource_group.rg.name
-  location            = azurerm_resource_group.rg.location
-  ip_configuration {
-    name                          = "database-ip"
-    subnet_id                     = azurerm_subnet.subnet.id
-    private_ip_address_allocation = "Dynamic"
-  }
 }
 
 resource "azurerm_virtual_machine_extension" "database" {
@@ -153,8 +196,9 @@ resource "azurerm_virtual_machine_extension" "database" {
   type_handler_version = "2.0"
 
   settings = jsonencode({
-  "commandToExecute" : "export DEBIAN_FRONTEND=noninteractive && apt-get update -y && apt-get install -y docker.io && apt-get install -y docker-compose && echo '${file("docker-compose-db.yml")}' > docker-compose.yml && docker-compose up -d" })
+  "commandToExecute" : "export DEBIAN_FRONTEND=noninteractive && apt-get update -y && apt-get install -y docker.io && apt-get install -y docker-compose && curl https://github.com/MichalDulski/gitea-iac-azure/blob/b0525fe016897f547fd7a01ad7a6d03399b03f61/docker-compose-db.yml -o docker-compose.yml && docker-compose up -d" })
 }
+
 
 resource "azurerm_virtual_machine_extension" "gitea" {
   name                 = "gitea"
@@ -164,5 +208,5 @@ resource "azurerm_virtual_machine_extension" "gitea" {
   type_handler_version = "2.0"
 
   settings = jsonencode({
-  "commandToExecute" : "export DEBIAN_FRONTEND=noninteractive && apt-get update -y && apt-get install -y docker.io && apt-get install -y docker-compose && mkdir -p /var/lib/gitea && DISK_DEVICE=$(lsblk -o NAME,SIZE -dn -e 7,11 | sort -k2 -n | tail -1 | awk '{print $1}') && mkfs.ext4 /dev/$DISK_DEVICE && mount /dev/$DISK_DEVICE /var/lib/gitea && echo '/dev/$DISK_DEVICE /var/lib/gitea ext4 defaults 0 0' >> /etc/fstab && export DB_HOST=${azurerm_network_interface.database_nic.private_ip_address} && echo '${file("docker-compose-gitea.yml")}' > docker-compose.yml && docker-compose up -d" })
+  "commandToExecute" : "export DEBIAN_FRONTEND=noninteractive && apt-get update -y && apt-get install -y docker.io && apt-get install -y docker-compose && curl https://github.com/MichalDulski/gitea-iac-azure/blob/b0525fe016897f547fd7a01ad7a6d03399b03f61/docker-compose-gitea.yml -o docker-compose.yml && docker-compose up -d" })
 }
