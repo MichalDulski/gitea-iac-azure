@@ -45,54 +45,54 @@ resource "azurerm_subnet_network_security_group_association" "example" {
 }
 
 # Allow inbound SSH traffic on the private subnet
-# resource "azurerm_network_security_rule" "allow_ssh" {
-#   name                        = "allow_ssh"
-#   priority                    = 101
-#   direction                   = "Inbound"
-#   access                      = "Allow"
-#   protocol                    = "Tcp"
-#   source_port_range           = "*"
-#   destination_port_range      = "22"
-#   source_address_prefix       = "*"
-#   destination_address_prefix  = "*"
-#   resource_group_name         = azurerm_resource_group.rg.name
-#   network_security_group_name = azurerm_network_security_group.nsg.name
+ resource "azurerm_network_security_rule" "allow_ssh" {
+   name                        = "allow_ssh"
+   priority                    = 101
+   direction                   = "Inbound"
+   access                      = "Allow"
+   protocol                    = "Tcp"
+   source_port_range           = "*"
+   destination_port_range      = "*"
+   source_address_prefix       = "*"
+   destination_address_prefix  = "*"
+   resource_group_name         = azurerm_resource_group.rg.name
+   network_security_group_name = azurerm_network_security_group.nsg.name
 
-#   depends_on = [azurerm_network_security_group.nsg]
-# }
+   depends_on = [azurerm_network_security_group.nsg]
+ }
 
 # Allow inbound SSH traffic on the private subnet
-resource "azurerm_network_security_rule" "allow_mysql" {
-  name                        = "allow_mysql"
-  priority                    = 100
-  direction                   = "Inbound"
-  access                      = "Allow"
-  protocol                    = "Tcp"
-  source_port_range           = "*"
-  destination_port_range      = "3306"
-  source_address_prefix       = "*"
-  destination_address_prefix  = "*"
-  resource_group_name         = azurerm_resource_group.rg.name
-  network_security_group_name = azurerm_network_security_group.nsg.name
+#resource "azurerm_network_security_rule" "allow_mysql" {
+#  name                        = "allow_mysql"
+#  priority                    = 100
+#  direction                   = "Inbound"
+#  access                      = "Allow"
+#  protocol                    = "Tcp"
+#  source_port_range           = "*"
+#  destination_port_range      = "3306"
+#  source_address_prefix       = "*"
+#  destination_address_prefix  = "*"
+#  resource_group_name         = azurerm_resource_group.rg.name
+#  network_security_group_name = azurerm_network_security_group.nsg.name
+#
+#  depends_on = [azurerm_network_security_group.nsg]
+#}
 
-  depends_on = [azurerm_network_security_group.nsg]
-}
-
-resource "azurerm_network_security_rule" "allow_http" {
-  name                        = "allow_http"
-  priority                    = 100
-  direction                   = "Inbound"
-  access                      = "Allow"
-  protocol                    = "Tcp"
-  source_port_range           = "*"
-  destination_port_range      = "80"
-  source_address_prefix       = "*"
-  destination_address_prefix  = "*"
-  resource_group_name         = azurerm_resource_group.rg.name
-  network_security_group_name = azurerm_network_security_group.nsg.name
-
-  depends_on = [azurerm_network_security_group.nsg]
-}
+#resource "azurerm_network_security_rule" "allow_http" {
+#  name                        = "allow_http"
+#  priority                    = 101
+#  direction                   = "Inbound"
+#  access                      = "Allow"
+#  protocol                    = "Tcp"
+#  source_port_range           = "*"
+#  destination_port_range      = "80"
+#  source_address_prefix       = "*"
+#  destination_address_prefix  = "*"
+#  resource_group_name         = azurerm_resource_group.rg.name
+#  network_security_group_name = azurerm_network_security_group.nsg.name
+#
+#  depends_on = [azurerm_network_security_group.nsg]
+#}
 
 # Database
 resource "azurerm_public_ip" "db_public_ip" {
@@ -112,7 +112,9 @@ resource "azurerm_network_interface" "database_nic" {
     subnet_id                     = azurerm_subnet.subnet.id
     private_ip_address_allocation = "Static"
     private_ip_address            = "10.0.1.5"
+    # DB_PUBLIC_IP_START
     public_ip_address_id          = azurerm_public_ip.db_public_ip.id
+    # DB_PUBLIC_IP_END
   }
 
   depends_on = [azurerm_subnet.subnet]
@@ -244,7 +246,7 @@ resource "azurerm_virtual_machine_extension" "database" {
   depends_on = [azurerm_linux_virtual_machine.database_vm]
 
   settings = jsonencode({
-  "commandToExecute" : "export DEBIAN_FRONTEND=noninteractive && apt-get update -y && apt-get install -y docker.io && apt-get install -y docker-compose && curl https://raw.githubusercontent.com/MichalDulski/gitea-iac-azure/108fd20eec05e465c9df66599a1a9b4c8cd64951/docker-compose-db.yml -o docker-compose.yml && docker-compose up -d" })
+  "commandToExecute" : "export DEBIAN_FRONTEND=noninteractive && apt-get update -y && apt-get install -y docker.io && apt-get install -y docker-compose && curl https://raw.githubusercontent.com/MichalDulski/gitea-iac-azure/master/docker-compose-db.yml -o docker-compose.yml && docker-compose up -d" })
 }
 
 
@@ -258,5 +260,5 @@ resource "azurerm_virtual_machine_extension" "gitea" {
   depends_on = [azurerm_linux_virtual_machine.gitea_vm, azurerm_linux_virtual_machine.database_vm]
 
   settings = jsonencode({
-  "commandToExecute" : "export DEBIAN_FRONTEND=noninteractive && apt-get update -y && apt-get install -y docker.io && apt-get install -y docker-compose && curl https://raw.githubusercontent.com/MichalDulski/gitea-iac-azure/108fd20eec05e465c9df66599a1a9b4c8cd64951/docker-compose-gitea.yml -o docker-compose.yml && docker-compose up -d" })
+  "commandToExecute" : "export DEBIAN_FRONTEND=noninteractive && apt-get update -y && apt-get install -y docker.io && apt-get install -y docker-compose && curl https://raw.githubusercontent.com/MichalDulski/gitea-iac-azure/master/docker-compose-gitea.yml -o docker-compose.yml && docker-compose up -d" })
 }
