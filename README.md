@@ -34,5 +34,5 @@ Before deploying Gitea using Terraform, ensure you have completed the following 
 Once you have met all the prerequisites, follow these steps to deploy Gitea:
 
 1. **Run the Deployment Script**:
-    Execute the `deploy-gitea.sh` script to
+    Execute the `deploy-gitea.sh` script
 
