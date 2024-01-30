@@ -1,16 +1,12 @@
-# main.tf
-
 provider "azurerm" {
   features {}
 }
 
-# Resource Group
 resource "azurerm_resource_group" "rg" {
   name     = "gitea-resource-group"
   location = "North Europe"
 }
 
-# Virtual Network
 resource "azurerm_virtual_network" "vnet" {
   name                = "gitea-vnet"
   resource_group_name = azurerm_resource_group.rg.name
@@ -20,7 +16,6 @@ resource "azurerm_virtual_network" "vnet" {
   depends_on = [azurerm_resource_group.rg]
 }
 
-# Subnet
 resource "azurerm_subnet" "subnet" {
   name                 = "gitea-private-subnet"
   resource_group_name  = azurerm_resource_group.rg.name
@@ -30,7 +25,6 @@ resource "azurerm_subnet" "subnet" {
   depends_on = [azurerm_virtual_network.vnet]
 }
 
-# Network Security Group for the private subnet
 resource "azurerm_network_security_group" "nsg" {
   name                = "gitea-private-nsg"
   resource_group_name = azurerm_resource_group.rg.name
@@ -44,57 +38,50 @@ resource "azurerm_subnet_network_security_group_association" "example" {
   network_security_group_id = azurerm_network_security_group.nsg.id
 }
 
-# Allow inbound SSH traffic on the private subnet
- resource "azurerm_network_security_rule" "allow_ssh" {
-   name                        = "allow_ssh"
-   priority                    = 101
-   direction                   = "Inbound"
-   access                      = "Allow"
-   protocol                    = "Tcp"
-   source_port_range           = "*"
-   destination_port_range      = "*"
-   source_address_prefix       = "*"
-   destination_address_prefix  = "*"
-   resource_group_name         = azurerm_resource_group.rg.name
-   network_security_group_name = azurerm_network_security_group.nsg.name
+# ALLOW_SSH_START
+resource "azurerm_network_security_rule" "allow_ssh" {
+  name                        = "allow_ssh"
+  priority                    = 100
+  direction                   = "Inbound"
+  access                      = "Allow"
+  protocol                    = "Tcp"
+  source_port_range           = "*"
+  destination_port_range      = "22"
+  source_address_prefix       = "*"
+  destination_address_prefix  = "*"
+  resource_group_name         = azurerm_resource_group.rg.name
+  network_security_group_name = azurerm_network_security_group.nsg.name
+}
+# ALLOW_SSH_END
 
-   depends_on = [azurerm_network_security_group.nsg]
- }
+resource "azurerm_network_security_rule" "allow_mysql" {
+  name                        = "allow_mysql"
+  priority                    = 101
+  direction                   = "Inbound"
+  access                      = "Allow"
+  protocol                    = "Tcp"
+  source_port_range           = "*"
+  destination_port_range      = "3306"
+  source_address_prefix       = "10.0.0.0/16"
+  destination_address_prefix  = "*"
+  resource_group_name         = azurerm_resource_group.rg.name
+  network_security_group_name = azurerm_network_security_group.nsg.name
+}
 
-# Allow inbound SSH traffic on the private subnet
-#resource "azurerm_network_security_rule" "allow_mysql" {
-#  name                        = "allow_mysql"
-#  priority                    = 100
-#  direction                   = "Inbound"
-#  access                      = "Allow"
-#  protocol                    = "Tcp"
-#  source_port_range           = "*"
-#  destination_port_range      = "3306"
-#  source_address_prefix       = "*"
-#  destination_address_prefix  = "*"
-#  resource_group_name         = azurerm_resource_group.rg.name
-#  network_security_group_name = azurerm_network_security_group.nsg.name
-#
-#  depends_on = [azurerm_network_security_group.nsg]
-#}
+resource "azurerm_network_security_rule" "allow_http" {
+  name                        = "allow_http"
+  priority                    = 102
+  direction                   = "Inbound"
+  access                      = "Allow"
+  protocol                    = "Tcp"
+  source_port_range           = "*"
+  destination_port_range      = "80"
+  source_address_prefix       = "*"
+  destination_address_prefix  = "*"
+  resource_group_name         = azurerm_resource_group.rg.name
+  network_security_group_name = azurerm_network_security_group.nsg.name
+}
 
-#resource "azurerm_network_security_rule" "allow_http" {
-#  name                        = "allow_http"
-#  priority                    = 101
-#  direction                   = "Inbound"
-#  access                      = "Allow"
-#  protocol                    = "Tcp"
-#  source_port_range           = "*"
-#  destination_port_range      = "80"
-#  source_address_prefix       = "*"
-#  destination_address_prefix  = "*"
-#  resource_group_name         = azurerm_resource_group.rg.name
-#  network_security_group_name = azurerm_network_security_group.nsg.name
-#
-#  depends_on = [azurerm_network_security_group.nsg]
-#}
-
-# Database
 resource "azurerm_public_ip" "db_public_ip" {
   name                    = "db-public-ip"
   location                = azurerm_resource_group.rg.location
@@ -120,7 +107,6 @@ resource "azurerm_network_interface" "database_nic" {
   depends_on = [azurerm_subnet.subnet]
 }
 
-# Database VM
 resource "azurerm_linux_virtual_machine" "database_vm" {
   name                = "database-vm"
   resource_group_name = azurerm_resource_group.rg.name
@@ -151,8 +137,6 @@ resource "azurerm_linux_virtual_machine" "database_vm" {
   }
 }
 
-# gitea vm
-
 resource "azurerm_public_ip" "gitea_public_ip" {
   name                    = "gitea-public-ip"
   location                = azurerm_resource_group.rg.location
@@ -161,7 +145,6 @@ resource "azurerm_public_ip" "gitea_public_ip" {
   idle_timeout_in_minutes = 30
 }
 
-# Network Interfaces
 resource "azurerm_network_interface" "gitea_nic" {
   name                = "gitea-nic"
   resource_group_name = azurerm_resource_group.rg.name
@@ -177,7 +160,7 @@ resource "azurerm_network_interface" "gitea_nic" {
 
   depends_on = [azurerm_subnet.subnet]
 }
-# Managed Disk
+
 resource "azurerm_managed_disk" "gitea_managed_disk" {
   name                 = "acctestdisk1"
   location             = azurerm_resource_group.rg.location
@@ -187,8 +170,6 @@ resource "azurerm_managed_disk" "gitea_managed_disk" {
   disk_size_gb         = "10"
 }
 
-
-# Gitea VM
 resource "azurerm_linux_virtual_machine" "gitea_vm" {
   name                = "gitea-vm"
   resource_group_name = azurerm_resource_group.rg.name
@@ -249,16 +230,3 @@ resource "azurerm_virtual_machine_extension" "database" {
   "commandToExecute" : "export DEBIAN_FRONTEND=noninteractive && apt-get update -y && apt-get install -y docker.io && apt-get install -y docker-compose && curl https://raw.githubusercontent.com/MichalDulski/gitea-iac-azure/master/docker-compose-db.yml -o docker-compose.yml && docker-compose up -d" })
 }
 
-
-resource "azurerm_virtual_machine_extension" "gitea" {
-  name                 = "gitea"
-  virtual_machine_id   = azurerm_linux_virtual_machine.gitea_vm.id
-  publisher            = "Microsoft.Azure.Extensions"
-  type                 = "CustomScript"
-  type_handler_version = "2.0"
-
-  depends_on = [azurerm_linux_virtual_machine.gitea_vm, azurerm_linux_virtual_machine.database_vm]
-
-  settings = jsonencode({
-  "commandToExecute" : "export DEBIAN_FRONTEND=noninteractive && apt-get update -y && apt-get install -y docker.io && apt-get install -y docker-compose && curl https://raw.githubusercontent.com/MichalDulski/gitea-iac-azure/master/docker-compose-gitea.yml -o docker-compose.yml && docker-compose up -d" })
-}
